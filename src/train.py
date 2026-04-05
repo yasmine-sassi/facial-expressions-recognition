@@ -52,14 +52,14 @@ def train_model(model, X_train, y_train, X_val, y_val, epochs=100, batch_size=32
     return history
 
 
-def plot_training_history(history, save_path='results/training_history.png'):
+def plot_training_history(history, save_path='../results/model/training_history.png'):
     """Plot training and validation metrics.
     
     Args:
         history: History object from model training
         save_path: Path to save the plot
     """
-    os.makedirs('results', exist_ok=True)
+    os.makedirs('../results/model', exist_ok=True)
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     
