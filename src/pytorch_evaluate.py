@@ -28,8 +28,11 @@ def evaluate_model(model, X_test, y_test, device='cuda', model_name='emotion_mod
     """
     model.eval()
     
-    # Convert to tensor
-    X_test_tensor = torch.from_numpy(X_test).float().to(device)
+    # Convert to tensor and permute from (batch, height, width, channels) to (batch, channels, height, width)
+    X_test_tensor = torch.from_numpy(X_test).float()
+    if X_test_tensor.ndim == 4 and X_test_tensor.shape[-1] in [1, 3, 4]:  # (B, H, W, C) format
+        X_test_tensor = X_test_tensor.permute(0, 3, 1, 2)
+    X_test_tensor = X_test_tensor.to(device)
     
     # Predictions
     with torch.no_grad():
@@ -56,7 +59,7 @@ def evaluate_model(model, X_test, y_test, device='cuda', model_name='emotion_mod
     }
 
 
-def plot_confusion_matrix(y_test, y_pred, model_name='emotion_model', save_path='results/pytorch_confusion_matrix.png'):
+def plot_confusion_matrix(y_test, y_pred, model_name='emotion_model', save_path='results/model/pytorch_confusion_matrix.png'):
     """
     Plot and save confusion matrix.
     
@@ -85,7 +88,7 @@ def plot_confusion_matrix(y_test, y_pred, model_name='emotion_model', save_path=
 
 
 def plot_per_class_metrics(y_test, y_pred, model_name='emotion_model', 
-                          save_path='results/pytorch_per_class_metrics.png'):
+                          save_path='results/model/pytorch_per_class_metrics.png'):
     """
     Plot per-class precision, recall, and F1-score.
     
@@ -122,7 +125,7 @@ def plot_per_class_metrics(y_test, y_pred, model_name='emotion_model',
 
 
 def plot_prediction_distribution(y_pred_proba, model_name='emotion_model',
-                                save_path='results/pytorch_pred_distribution.png'):
+                                save_path='results/model/pytorch_pred_distribution.png'):
     """
     Plot distribution of prediction confidence.
     
@@ -147,7 +150,7 @@ def plot_prediction_distribution(y_pred_proba, model_name='emotion_model',
     plt.close()
 
 
-def compare_model_results(results_list, model_names, save_path='results/pytorch_model_comparison_results.png'):
+def compare_model_results(results_list, model_names, save_path='results/model/pytorch_model_comparison_results.png'):
     """
     Compare results of multiple models side-by-side.
     
@@ -204,13 +207,13 @@ def create_evaluation_report(model, X_test, y_test, device='cuda', model_name='e
     
     # Visualizations
     plot_confusion_matrix(y_test, results['y_pred'], model_name=model_name,
-                         save_path=f'results/pytorch_{model_name}_confusion_matrix.png')
+                         save_path=f'results/model/pytorch_{model_name}_confusion_matrix.png')
     
     plot_per_class_metrics(y_test, results['y_pred'], model_name=model_name,
-                          save_path=f'results/pytorch_{model_name}_per_class_metrics.png')
+                          save_path=f'results/model/pytorch_{model_name}_per_class_metrics.png')
     
     plot_prediction_distribution(results['y_pred_proba'], model_name=model_name,
-                               save_path=f'results/pytorch_{model_name}_confidence.png')
+                               save_path=f'results/model/pytorch_{model_name}_confidence.png')
     
     print(f"\nEvaluation complete for {model_name}")
     

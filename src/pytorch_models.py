@@ -57,7 +57,7 @@ class BaselineCNN(nn.Module):
         x = self.pool3(x)
         
         # Flatten
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         
         # Fully Connected
         x = F.relu(self.fc1(x))
@@ -150,7 +150,7 @@ class AdvancedCNN(nn.Module):
         
         # Global Average Pooling
         x = self.global_avgpool(x)
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         
         # Fully Connected
         x = F.relu(self.bn_fc1(self.fc1(x)))
@@ -233,7 +233,7 @@ class ResNetEmotion(nn.Module):
         x = self.layer4(x)
         
         x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         x = self.fc(x)
         
         return x

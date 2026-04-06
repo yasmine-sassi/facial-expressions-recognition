@@ -1,7 +1,7 @@
 # Data files
 data/
 data/*
-
+pytorch_gpu/
 # Models
 saved_models/*.keras
 saved_models/*.h5

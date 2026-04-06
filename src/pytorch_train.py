@@ -11,6 +11,69 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
+class AugmentedDataLoader:
+    """Data loader with augmentation support for training."""
+    
+    def __init__(self, X, y, batch_size=32, device='cuda', augment=False):
+        """
+        Initialize augmented data loader.
+        
+        Args:
+            X: Input data (numpy array)
+            y: Labels (numpy array)
+            batch_size: Batch size
+            device: 'cuda' or 'cpu'
+            augment: Whether to apply augmentation
+        """
+        self.X = X
+        self.y = y
+        self.batch_size = batch_size
+        self.device = device
+        self.augment = augment
+        self.indices = np.arange(len(X))
+        
+    def __iter__(self):
+        """Iterate over batches."""
+        if self.augment:
+            np.random.shuffle(self.indices)
+        
+        for i in range(0, len(self.X), self.batch_size):
+            idx = self.indices[i:i+self.batch_size]
+            X_batch = self.X[idx]
+            y_batch = self.y[idx]
+            
+            # Apply augmentation to training data
+            if self.augment:
+                X_batch = self._augment_batch(X_batch)
+            
+            # Convert to tensor and permute to (B, C, H, W)
+            X_batch = torch.from_numpy(X_batch).float()
+            if X_batch.ndim == 4 and X_batch.shape[-1] in [1, 3, 4]:
+                X_batch = X_batch.permute(0, 3, 1, 2)
+            
+            y_batch = torch.from_numpy(y_batch).long()
+            
+            yield X_batch.to(self.device), y_batch.to(self.device)
+    
+    def _augment_batch(self, X_batch):
+        """Apply data augmentation: horizontal flip and brightness adjustment."""
+        X_aug = []
+        for x in X_batch:
+            # Random horizontal flip (50% chance)
+            if np.random.rand() > 0.5:
+                x = np.fliplr(x)
+            # Random brightness adjustment (50% chance)
+            if np.random.rand() > 0.5:
+                brightness = np.random.uniform(0.9, 1.1)
+                x = np.clip(x * brightness, 0, 255)
+            X_aug.append(x)
+        return np.array(X_aug)
+    
+    def __len__(self):
+        """Return number of batches."""
+        return (len(self.X) + self.batch_size - 1) // self.batch_size
+
+
 class EarlyStoppingCallback:
     """Early stopping to prevent overfitting."""
     
@@ -52,10 +115,17 @@ def get_class_weights(y_train, num_classes=7):
 
 def create_dataloaders(X_train, y_train, X_val, y_val, batch_size=32, device='cuda'):
     """Create PyTorch DataLoaders from numpy arrays."""
-    # Convert to tensors
+    # Convert to tensors and permute from (batch, height, width, channels) to (batch, channels, height, width)
     X_train_tensor = torch.from_numpy(X_train).float()
+    if X_train_tensor.ndim == 4 and X_train_tensor.shape[-1] in [1, 3, 4]:  # (B, H, W, C) format
+        X_train_tensor = X_train_tensor.permute(0, 3, 1, 2)
+    
     y_train_tensor = torch.from_numpy(y_train).long()
+    
     X_val_tensor = torch.from_numpy(X_val).float()
+    if X_val_tensor.ndim == 4 and X_val_tensor.shape[-1] in [1, 3, 4]:  # (B, H, W, C) format
+        X_val_tensor = X_val_tensor.permute(0, 3, 1, 2)
+    
     y_val_tensor = torch.from_numpy(y_val).long()
     
     # Create datasets
@@ -163,7 +233,7 @@ def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001
     
     # Learning rate scheduler
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, 
-                                  patience=5, min_lr=1e-7, verbose=True)
+                                  patience=5, min_lr=1e-7)
     
     # Early stopping
     early_stopper = EarlyStoppingCallback(patience=15)
@@ -227,7 +297,7 @@ def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001
     return history
 
 
-def plot_training_history(history, model_name='emotion_model', save_path='results/pytorch_training_history.png'):
+def plot_training_history(history, model_name='emotion_model', save_path='results/model/pytorch_training_history.png'):
     """Plot training history."""
     os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
     
@@ -257,7 +327,7 @@ def plot_training_history(history, model_name='emotion_model', save_path='result
     plt.close()
 
 
-def compare_models_history(histories, model_names, save_path='results/pytorch_model_comparison.png'):
+def compare_models_history(histories, model_names, save_path='results/model/pytorch_model_comparison.png'):
     """Compare training histories of multiple models."""
     os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else '.', exist_ok=True)
     

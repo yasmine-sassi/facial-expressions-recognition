@@ -1,50 +1,161 @@
-# Facial Emotion Recognition (FER2013)
+# Facial Emotion Recognition (FER2013) - PyTorch Edition
 
-A deep learning project for recognizing facial emotions using Convolutional Neural Networks (CNN) on the FER2013 dataset.
+A deep learning project for recognizing facial emotions using PyTorch Convolutional Neural Networks (CNN) on the FER2013 dataset with GPU acceleration support.
 
-## Project Structure
+---
 
-```
-projet_traitement_img/
-├── data/                         # Dataset and preprocessed data
-│   ├── train/                    # Training images organized by emotion 3,171 img
-│   ├── test/                     # Test images organized by emotion
-│   └── preprocessed/             # Generated .npy files
-│       ├── X_train.npy          # Training images (22,968, 48, 48, 1)
-│       ├── y_train.npy          # Training labels (22,968,)
-│       ├── X_val.npy            # Validation images (5,741, 48, 48, 1)
-│       ├── y_val.npy            # Validation labels (5,741,)
-│       ├── X_test.npy           # Test images (7,178, 48, 48, 1)
-│       ├── y_test.npy           # Test labels (7,178,)
-│       ├── class_weights.json    # Balanced class weights for training
-│       └── class_mapping.json    # Emotion label mapping
-│
-├── notebooks/                    # Jupyter notebooks
-│   ├── 01_preprocessing.ipynb    # Data loading, cleaning & preprocessing
-│   ├── 02_baseline_cnn.ipynb     # Baseline CNN model
-│   ├── 03_advanced_model.ipynb   # Advanced architectures
-│   └── 04_evaluation.ipynb       # Results analysis and comparison
-│
-├── src/                          # Reusable modules
-│   ├── preprocessing.py          # Data preprocessing functions
-│   ├── model.py                  # CNN architectures
-│   ├── train.py                  # Training loop
-│   ├── evaluate.py               # Metrics and confusion matrix
-│   └── predict.py                # Inference functions
-│
-├── frontend/
-│   └── front.py                  # Web demo interface
-│
-├── results/                      # Generated visualizations
-│
-├── saved_models/                 # Trained models (.h5/.keras)
-├── requirements.txt
-└── README.md
+## 📋 Table of Contents
+
+1. [Project Overview](#project-overview)
+2. [Hardware & System Setup](#hardware--system-setup)
+3. [Installation & Setup](#installation--setup)
+4. [Project Structure](#project-structure)
+5. [Dataset Overview](#dataset-overview)
+6. [Architecture & Models](#architecture--models)
+7. [Preprocessing Pipeline](#preprocessing-pipeline)
+8. [Quick Start Guide](#quick-start-guide)
+9. [Running the Project](#running-the-project)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## 🎯 Project Overview
+
+This project implements a complete facial emotion recognition pipeline using PyTorch with GPU acceleration:
+
+- **Dataset**: FER2013 (35,887 images across 7 emotion classes)
+- **Framework**: PyTorch 2.1+ with CUDA 12.1
+- **GPU**: NVIDIA GeForce RTX 3050 (4GB VRAM)
+- **Models**: Baseline CNN, Advanced CNN, ResNet-based architectures
+- **Performance**: Class-balanced training with early stopping
+
+---
+
+## ⚙️ Hardware & System Setup
+
+### Your Hardware
+
+- **GPU**: NVIDIA GeForce RTX 3050 (4GB VRAM)
+- **CUDA Capability**: 12.7 (supports CUDA 12.1)
+- **Driver Version**: 566.07+
+- **Python**: 3.10
+
+### GPU Verification
+
+Check your GPU status anytime:
+
+```bash
+nvidia-smi
 ```
 
 ---
 
-## Dataset Overview
+## 🚀 Installation & Setup
+
+### Step 1: Create Python Environment
+
+**Using Conda (Recommended):**
+
+```bash
+conda create -n pytorch_gpu python=3.10 -y
+conda activate pytorch_gpu
+```
+
+**Or Using venv:**
+
+```bash
+python -m venv pytorch_gpu
+.\pytorch_gpu\Scripts\activate  # Windows
+```
+
+### Step 2: Install PyTorch with GPU Support
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+This installs PyTorch with CUDA 12.1 (optimized for RTX 3050).
+
+### Step 3: Install Project Dependencies
+
+```bash
+pip install -r requirements_pytorch.txt
+```
+
+### Step 4: Verify GPU Setup
+
+```python
+import torch
+
+print("PyTorch version:", torch.__version__)
+print("CUDA available:", torch.cuda.is_available())
+print("CUDA version:", torch.version.cuda)
+print("GPU name:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU")
+print("GPU Memory:", torch.cuda.get_device_properties(0).total_memory / 1e9, "GB")
+```
+
+**Expected Output:**
+
+```
+PyTorch version: 2.1.0
+CUDA available: True
+CUDA version: 12.1
+GPU name: NVIDIA GeForce RTX 3050
+GPU Memory: 4.0 GB
+```
+
+### Step 5: Install Jupyter (Optional, for notebooks)
+
+```bash
+pip install jupyter notebook
+```
+
+---
+
+## 📁 Project Structure
+
+```
+projet_traitement_img/
+├── data/                         # Dataset and preprocessed data
+│   ├── train/                    # Training images (3,171 images)
+│   ├── test/                     # Test images
+│   └── preprocessed/             # Generated .npy files
+│       ├── X_train.npy          # Training images (22,968, 48, 48, 1)
+│       ├── y_train.npy          # Training labels
+│       ├── X_val.npy            # Validation images (5,741, 48, 48, 1)
+│       ├── y_val.npy            # Validation labels
+│       ├── X_test.npy           # Test images (7,178, 48, 48, 1)
+│       ├── y_test.npy           # Test labels
+│       ├── class_weights.json    # Balanced class weights
+│       └── class_mapping.json    # Emotion label mapping
+│
+├── notebooks/                    # Jupyter notebooks (PyTorch)
+│   ├── 01_Preprocessing.ipynb    # Data loading & preprocessing
+│   ├── 04_pytorch_baseline.ipynb # Baseline CNN training
+│   └── 05_pytorch_advanced.ipynb # Advanced architectures (ResNet)
+│
+├── src/                          # Reusable PyTorch modules
+│   ├── __init__.py
+│   ├── pytorch_models.py         # CNN architectures
+│   ├── pytorch_train.py          # Training utilities with GPU support
+│   └── pytorch_evaluate.py       # Evaluation metrics & visualization
+│
+├── frontend/
+│   └── front_pytorch.py          # Streamlit demo with PyTorch
+│
+├── results/                      # Generated visualizations
+├── saved_models/                 # Trained PyTorch models (.pt)
+│   ├── pytorch_baseline_cnn_*
+│   ├── pytorch_advanced_cnn_*
+│   └── pytorch_resnet_*
+│
+├── requirements_pytorch.txt      # PyTorch dependencies
+└── README.md                     # This file
+```
+
+---
+
+## 📊 Dataset Overview
 
 ### Total Images: **35,887**
 
@@ -58,184 +169,291 @@ projet_traitement_img/
 | Sad      | 4,830 | 1,247 | 6,077 | 0.8492×      |
 | Surprise | 3,171 | 831   | 4,002 | 1.2933×      |
 
-**Key Challenge**: Class imbalance ratio of **16.5×** (Happy vs Disgust) handled via balanced class weights.
+### Key Challenge
+
+Class imbalance ratio: **16.5×** (Happy vs Disgust)
+
+- **Solution**: Balanced class weights during training
+- **Quality**: 99.96% valid images (35,874/35,887)
 
 ---
 
-## Preprocessing Pipeline
+## 🏗️ Architecture & Models
 
-Complete 3-step preprocessing workflow implemented in `01_preprocessing.ipynb`:
+### Available Models
 
-### **Step 1: Nettoyage des données (Data Cleaning)**
+All models implemented in `src/pytorch_models.py`:
+
+#### 1. **Baseline CNN**
+
+- 3 convolutional blocks
+- Batch normalization & dropout
+- Simple fully connected head
+- **Best for**: Quick training & validation
+- **Training time**: ~5-10 minutes (GPU)
+
+```python
+from src.pytorch_models import BaselineCNN
+model = BaselineCNN()
+```
+
+#### 2. **Advanced CNN**
+
+- 4 convolutional blocks
+- Progressive feature expansion
+- Enhanced dropout & regularization
+- **Best for**: Balanced accuracy & training speed
+- **Training time**: ~15-20 minutes (GPU)
+
+```python
+from src.pytorch_models import AdvancedCNN
+model = AdvancedCNN()
+```
+
+#### 3. **ResNet-Based Model**
+
+- Residual connections
+- Deeper architecture
+- Transfer learning potential
+- **Best for**: Maximum accuracy
+- **Training time**: ~30-40 minutes (GPU)
+
+```python
+from src.pytorch_models import ResNetEmotion
+model = ResNetEmotion()
+```
+
+### Model Specifications
+
+- **Input**: 48×48 grayscale images
+- **Output**: 7-dimensional emotion logits
+- **Framework**: Pure PyTorch (no .keras dependencies)
+- **Device**: Automatically uses GPU if available
+
+---
+
+## 🔄 Preprocessing Pipeline
+
+Complete 3-step workflow in `notebooks/01_Preprocessing.ipynb`:
+
+### Step 1: Data Cleaning
 
 ✅ **Quality Assessment**:
 
-- Corrupted file detection (cv2.imread validation): **0 files**
-- Dimension validation (minimum 40×40 px): **0 files**
-- Contrast filtering (std dev threshold = 10): **13 anomalies**
-- **Overall quality: 99.96% valid** (35,874/35,887 images)
+- Corrupted file detection: 0 files
+- Dimension validation (min 40×40): 0 files
+- Contrast filtering (std dev ≥ 10): 13 anomalies removed
+- **Overall quality: 99.96%**
 
----
+### Step 2: Standardization
 
-### **Step 2: Redimensionnement (Resizing)**
+✅ **Resizing**:
 
-✅ **Standardization**:
+- Output: 48×48 pixels (uniform)
+- Color mode: Grayscale (1 channel)
+- Interpolation: Linear
+- Result: All images as (48, 48, 1) tensors
 
-- **Output size**: 48×48 pixels (uniform for all images)
-- **Color mode**: Grayscale (single channel: reduces 3×computation)
-- **Interpolation**: Linear (quality-preserving)
-- **Result**: All images reshaped to (48, 48, 1) tensor
+### Step 3: Normalization & Enhancement
 
----
-
-### **Step 3: Filtrage et amélioration (Filtering & Enhancement)**
-
-#### **3a) Normalization**
+✅ **Normalization**:
 
 ```
 rescale = 1.0 / 255
 Pixel range: [0, 255] → [0, 1]
-Verified mean: 0.50 | std: 0.25
+Mean: 0.50 | Std: 0.25
 ```
 
-#### **3b) Data Augmentation** (Applied during training only)
+---
 
-- Rotation: ±15°
-- Horizontal flip: 50% probability
-- Zoom: ±10%
-- Width/Height shift: ±10%
-- Purpose: Increase diversity, improve generalization
+## ⚡ Quick Start Guide
 
-#### **3c) Class Balancing**
+### Fastest Path (5 Minutes)
 
-Balanced weights applied during `model.fit()` to handle class imbalance:
+```bash
+# 1. Activate environment
+conda activate pytorch_gpu
+
+# 2. Start Jupyter
+jupyter notebook
+
+# 3. Open notebooks/04_pytorch_baseline.ipynb
+# 4. Run all cells to train baseline model
+```
+
+### Training Options
+
+**Option A: Baseline Model** (Quick)
+
+```
+Open: notebooks/04_pytorch_baseline.ipynb
+Time: ~5-10 minutes
+Accuracy: ~65-70%
+```
+
+**Option B: Advanced Models** (Comprehensive)
+
+```
+Open: notebooks/05_pytorch_advanced.ipynb
+Time: ~30-50 minutes
+Accuracy: ~72-75%
+Includes: Advanced CNN + ResNet
+```
+
+---
+
+## 🎮 Running the Project
+
+### Train a Model
+
+```bash
+# Activate environment
+conda activate pytorch_gpu
+
+# Start Jupyter
+jupyter notebook
+
+# Open notebooks/04_pytorch_baseline.ipynb or 05_pytorch_advanced.ipynb
+```
+
+### Use Trained Model in Web Demo
+
+```bash
+streamlit run frontend/front_pytorch.py
+```
+
+### Evaluate Model Performance
+
+In Jupyter notebook:
 
 ```python
-class_weight_dict = {
-    0: 1.0266,   # Angry
-    1: 9.4016,   # Disgust (most underrepresented - 9.40× weight)
-    2: 1.0010,   # Fear
-    3: 0.5685,   # Happy (most overrepresented - 0.57× weight)
-    4: 0.8261,   # Neutral
-    5: 0.8492,   # Sad
-    6: 1.2933    # Surprise
-}
+from src.pytorch_evaluate import evaluate_model
+from src.pytorch_models import BaselineCNN
+import torch
+
+# Load trained model
+model = BaselineCNN()
+model.load_state_dict(torch.load('saved_models/pytorch_baseline_cnn_best.pt'))
+
+# Evaluate
+metrics = evaluate_model(model, X_test, y_test)
+print(metrics)
 ```
 
----
+### Monitor GPU Usage During Training
 
-## Data Split & Loading
-
-### **Train/Validation/Test Distribution**
-
-```
-28,709 training images
-├── Training set (80%):   22,968 images → 359 batches
-└── Validation set (20%):  5,741 images → 90 batches
-
-Separate test set:        7,178 images → 113 batches
-```
-
-**All data exported to .npy format for fast loading (10-100× faster than imread)**
-
----
-
-## Setup
-
-1. Clone the repository
-2. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Organize dataset:
-   - Place images in `data/train/{emotion}/` and `data/test/{emotion}/`
-   - Emotion folders: angry, disgust, fear, happy, neutral, sad, surprise
-
----
-
-## Workflow
-
-1. **Preprocessing** ✅ COMPLETE
-   - Run `01_preprocessing.ipynb`
-   - Output: 6 .npy files + 2 JSON metadata + 10 PNG visualizations
-   - Quality: 99.96% valid images
-   - Time: ~60 seconds
-
-2. **Baseline Model**
-   - Run `02_baseline_cnn.ipynb`
-   - Simple CNN with class weights & data augmentation
-
-3. **Advanced Model**
-   - Run `03_advanced_model.ipynb`
-   - Batch norm, dropout, deeper architecture
-
-4. **Evaluation**
-   - Run `04_evaluation.ipynb`
-   - Confusion matrix, precision/recall/F1, error analysis
-
-5. **Demo**
-   - Run `python -m streamlit run frontend/front.py`
-   - Real-time emotion prediction
-
----
-
-## Emotion Classes
-
-| Index | Class    |
-| ----- | -------- |
-| 0     | Angry    |
-| 1     | Disgust  |
-| 2     | Fear     |
-| 3     | Happy    |
-| 4     | Neutral  |
-| 5     | Sad      |
-| 6     | Surprise |
-
----
-
-## Quality Metrics
-
-| Metric           | Value           | Status       |
-| ---------------- | --------------- | ------------ |
-| Total images     | 35,887          | ✅           |
-| Valid images     | 99.96%          | ✅ EXCELLENT |
-| Corrupted files  | 0               | ✅ CLEAN     |
-| Normalization    | [0, 1] verified | ✅           |
-| Class balance    | 9.40× handled   | ✅           |
-| Image uniformity | 48×48 grayscale | ✅           |
-
----
-
-## Requirements
-
-- Python 3.8+
-- TensorFlow/Keras 2.10+
-- NumPy, Pandas
-- OpenCV (cv2)
-- scikit-learn
-- Matplotlib, Seaborn
-
-Install with:
+In a separate terminal:
 
 ```bash
-pip install -r requirements.txt
+watch -n 1 nvidia-smi
+```
+
+Or one-time check:
+
+```bash
+nvidia-smi
 ```
 
 ---
 
-## 🏃 Running the Application
+## 🔧 Common Workflow
 
-### Basic Usage
+### Every Time You Start
 
 ```bash
-# From the frontend directory
-streamlit run frontend/front.py
+conda activate pytorch_gpu
+jupyter notebook
 ```
 
-The application will open in your default browser at `http://localhost:8501`
+### After Installing New Packages
 
-## License
+```bash
+pip install -r requirements_pytorch.txt
+```
 
-FER2013 Dataset: https://www.kaggle.com/datasets/deadskull7/fer2013
+### Check GPU Status
+
+```bash
+nvidia-smi
+```
+
+### Run Specific Training Script
+
+```python
+# In Jupyter cell or Python script
+from src.pytorch_train import train_model
+from src.pytorch_models import BaselineCNN
+
+model = BaselineCNN()
+trained_model = train_model(model, X_train, y_train, X_val, y_val, epochs=50)
+```
+
+---
+
+## ❌ Troubleshooting
+
+### GPU Not Detected (CUDA available: False)
+
+**Solution:**
+
+```bash
+# Reinstall PyTorch with correct CUDA version
+pip uninstall torch torchvision torchaudio -y
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+### OutOfMemory Error on GPU
+
+**Solutions:**
+
+1. Reduce batch size in training script
+2. Reduce image resolution
+3. Use gradient accumulation
+4. Check GPU memory with `nvidia-smi`
+
+### Notebook Kernel Not Found
+
+**Solution:**
+
+```bash
+# Install Jupyter in current environment
+pip install jupyter notebook
+```
+
+### Slow Training without GPU
+
+**Verify:**
+
+```python
+import torch
+print(torch.cuda.is_available())  # Should be True
+print(torch.cuda.get_device_name(0))  # Should show GeForce RTX 3050
+```
+
+If False, reinstall PyTorch with CUDA support (see GPU Not Detected).
+
+---
+
+## 📞 Key Dependencies
+
+- **PyTorch**: 2.1.0+
+- **TorchVision**: Latest
+- **NumPy**: Latest
+- **Matplotlib**: Latest
+- **Scikit-learn**: Latest
+- **Streamlit**: Latest
+
+See `requirements_pytorch.txt` for complete list.
+
+---
+
+## 📝 Notes
+
+- This project uses **PyTorch only** (Keras/TensorFlow removed)
+- GPU acceleration is optional but significantly speeds up training
+- Notebooks auto-save results to `results/` and `saved_models/`
+- All models use 7 emotion classes: Angry, Disgust, Fear, Happy, Neutral, Sad, Surprise
+
+---
+
+**Happy training! 🚀**
