@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import torchvision.transforms as transforms
 
 
 class AugmentedDataLoader:
@@ -113,8 +114,31 @@ def get_class_weights(y_train, num_classes=7):
     return torch.tensor(class_weights, dtype=torch.float32)
 
 
-def create_dataloaders(X_train, y_train, X_val, y_val, batch_size=32, device='cuda'):
-    """Create PyTorch DataLoaders from numpy arrays."""
+def create_dataloaders(X_train, y_train, X_val, y_val, batch_size=32, device='cuda', augment=True):
+    """
+    Create PyTorch DataLoaders from numpy arrays with optional augmentation.
+    
+    Args:
+        X_train, y_train: Training data and labels
+        X_val, y_val: Validation data and labels
+        batch_size: Batch size
+        device: 'cuda' or 'cpu'
+        augment: Whether to apply augmentation to training data
+    
+    Returns:
+        train_loader, val_loader: PyTorch DataLoaders
+    """
+    # Define augmentation transforms (applied only to training data)
+    if augment:
+        train_transforms = transforms.Compose([
+            transforms.RandomRotation(degrees=15),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),  # Random translation
+            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 0.2)),  # Mild blur
+        ])
+    else:
+        train_transforms = None
+    
     # Convert to tensors and permute from (batch, height, width, channels) to (batch, channels, height, width)
     X_train_tensor = torch.from_numpy(X_train).float()
     if X_train_tensor.ndim == 4 and X_train_tensor.shape[-1] in [1, 3, 4]:  # (B, H, W, C) format
@@ -128,9 +152,21 @@ def create_dataloaders(X_train, y_train, X_val, y_val, batch_size=32, device='cu
     
     y_val_tensor = torch.from_numpy(y_val).long()
     
+    # Create custom dataset class with augmentation
+    class AugmentedTensorDataset(TensorDataset):
+        def __init__(self, X, y, transforms=None):
+            super().__init__(X, y)
+            self.transforms = transforms
+        
+        def __getitem__(self, idx):
+            x, y = super().__getitem__(idx)
+            if self.transforms:
+                x = self.transforms(x)
+            return x, y
+    
     # Create datasets
-    train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-    val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
+    train_dataset = AugmentedTensorDataset(X_train_tensor, y_train_tensor, transforms=train_transforms)
+    val_dataset = TensorDataset(X_val_tensor, y_val_tensor)  # No augmentation on validation
     
     # Create dataloaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
