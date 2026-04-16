@@ -3,10 +3,10 @@ data/
 data/*
 pytorch_gpu/
 # Models
-saved_models/*.keras
-saved_models/*.h5
-saved_models/*.pth
-
+notebooks/saved_models/*.pt
+notebooks/saved_models/*.pth
+*.pt
+*.pth
 # Python
 __pycache__/
 *.py[cod]
@@ -46,7 +46,3 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
-
-# Results (optional - remove if you want to track them)
-# results/*.png
-# results/*.txt

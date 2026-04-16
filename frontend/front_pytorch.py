@@ -82,7 +82,7 @@ def load_model(model_type='pytorch'):
         if model_type == 'pytorch':
             from src.pytorch_models import get_model
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            model_path = Path('../saved_models/pytorch_best_model.pt')
+            model_path = Path('../saved_models/MediumCNN_best.pth')
             
             if model_path.exists():
                 # Try loading advanced model first

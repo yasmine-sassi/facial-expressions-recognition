@@ -12,69 +12,6 @@ import matplotlib.pyplot as plt
 import torchvision.transforms as transforms
 
 
-class AugmentedDataLoader:
-    """Data loader with augmentation support for training."""
-    
-    def __init__(self, X, y, batch_size=32, device='cuda', augment=False):
-        """
-        Initialize augmented data loader.
-        
-        Args:
-            X: Input data (numpy array)
-            y: Labels (numpy array)
-            batch_size: Batch size
-            device: 'cuda' or 'cpu'
-            augment: Whether to apply augmentation
-        """
-        self.X = X
-        self.y = y
-        self.batch_size = batch_size
-        self.device = device
-        self.augment = augment
-        self.indices = np.arange(len(X))
-        
-    def __iter__(self):
-        """Iterate over batches."""
-        if self.augment:
-            np.random.shuffle(self.indices)
-        
-        for i in range(0, len(self.X), self.batch_size):
-            idx = self.indices[i:i+self.batch_size]
-            X_batch = self.X[idx]
-            y_batch = self.y[idx]
-            
-            # Apply augmentation to training data
-            if self.augment:
-                X_batch = self._augment_batch(X_batch)
-            
-            # Convert to tensor and permute to (B, C, H, W)
-            X_batch = torch.from_numpy(X_batch).float()
-            if X_batch.ndim == 4 and X_batch.shape[-1] in [1, 3, 4]:
-                X_batch = X_batch.permute(0, 3, 1, 2)
-            
-            y_batch = torch.from_numpy(y_batch).long()
-            
-            yield X_batch.to(self.device), y_batch.to(self.device)
-    
-    def _augment_batch(self, X_batch):
-        """Apply data augmentation: horizontal flip and brightness adjustment."""
-        X_aug = []
-        for x in X_batch:
-            # Random horizontal flip (50% chance)
-            if np.random.rand() > 0.5:
-                x = np.fliplr(x)
-            # Random brightness adjustment (50% chance)
-            if np.random.rand() > 0.5:
-                brightness = np.random.uniform(0.9, 1.1)
-                x = np.clip(x * brightness, 0, 255)
-            X_aug.append(x)
-        return np.array(X_aug)
-    
-    def __len__(self):
-        """Return number of batches."""
-        return (len(self.X) + self.batch_size - 1) // self.batch_size
-
-
 class EarlyStoppingCallback:
     """Early stopping to prevent overfitting."""
     
@@ -107,21 +44,35 @@ class EarlyStoppingCallback:
 
 def get_class_weights(y_train, num_classes=7):
     """Compute class weights to handle imbalance."""
-    class_counts = np.bincount(y_train, minlevel=num_classes)
+    class_counts = np.bincount(y_train, minlength=num_classes)
     total_samples = len(y_train)
     class_weights = total_samples / (num_classes * class_counts)
     class_weights = class_weights / class_weights.sum() * num_classes
     return torch.tensor(class_weights, dtype=torch.float32)
 
 
-def create_dataloaders(X_train, y_train, X_val, y_val, batch_size=32, device='cuda', augment=True):
+class AugmentedTensorDataset(TensorDataset):
+    """Custom dataset with on-the-fly augmentation support."""
+    
+    def __init__(self, X, y, transform=None):
+        super().__init__(X, y)
+        self.transform = transform
+    
+    def __getitem__(self, idx):
+        x, y = super().__getitem__(idx)
+        if self.transform:
+            x = self.transform(x)
+        return x, y
+
+
+def create_dataloaders(X_train, y_train, X_val, y_val, batch_size=64, device='cuda', augment=True):
     """
     Create PyTorch DataLoaders from numpy arrays with optional augmentation.
     
     Args:
         X_train, y_train: Training data and labels
         X_val, y_val: Validation data and labels
-        batch_size: Batch size
+        batch_size: Batch size (default: 64 for ResNet50)
         device: 'cuda' or 'cpu'
         augment: Whether to apply augmentation to training data
     
@@ -131,46 +82,52 @@ def create_dataloaders(X_train, y_train, X_val, y_val, batch_size=32, device='cu
     # Define augmentation transforms (applied only to training data)
     if augment:
         train_transforms = transforms.Compose([
-            transforms.RandomRotation(degrees=15),
+            transforms.RandomRotation(degrees=5),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),  # Random translation
-            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 0.2)),  # Mild blur
+            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),  # Blur with wider range
         ])
     else:
         train_transforms = None
     
     # Convert to tensors and permute from (batch, height, width, channels) to (batch, channels, height, width)
     X_train_tensor = torch.from_numpy(X_train).float()
-    if X_train_tensor.ndim == 4 and X_train_tensor.shape[-1] in [1, 3, 4]:  # (B, H, W, C) format
+    # Convert grayscale (1 channel) to RGB (3 channels) by repeating
+    if X_train_tensor.ndim == 4 and X_train_tensor.shape[-1] == 1:  # (B, H, W, 1) grayscale
+        X_train_tensor = X_train_tensor.repeat(1, 1, 1, 3)  # (B, H, W, 3)
+    if X_train_tensor.ndim == 4 and X_train_tensor.shape[-1] in [3, 4]:  # (B, H, W, C) format
         X_train_tensor = X_train_tensor.permute(0, 3, 1, 2)
     
     y_train_tensor = torch.from_numpy(y_train).long()
     
     X_val_tensor = torch.from_numpy(X_val).float()
-    if X_val_tensor.ndim == 4 and X_val_tensor.shape[-1] in [1, 3, 4]:  # (B, H, W, C) format
+    # Convert grayscale (1 channel) to RGB (3 channels) by repeating
+    if X_val_tensor.ndim == 4 and X_val_tensor.shape[-1] == 1:  # (B, H, W, 1) grayscale
+        X_val_tensor = X_val_tensor.repeat(1, 1, 1, 3)  # (B, H, W, 3)
+    if X_val_tensor.ndim == 4 and X_val_tensor.shape[-1] in [3, 4]:  # (B, H, W, C) format
         X_val_tensor = X_val_tensor.permute(0, 3, 1, 2)
     
     y_val_tensor = torch.from_numpy(y_val).long()
     
-    # Create custom dataset class with augmentation
-    class AugmentedTensorDataset(TensorDataset):
-        def __init__(self, X, y, transforms=None):
-            super().__init__(X, y)
-            self.transforms = transforms
-        
-        def __getitem__(self, idx):
-            x, y = super().__getitem__(idx)
-            if self.transforms:
-                x = self.transforms(x)
-            return x, y
-    
     # Create datasets
-    train_dataset = AugmentedTensorDataset(X_train_tensor, y_train_tensor, transforms=train_transforms)
+    train_dataset = AugmentedTensorDataset(X_train_tensor, y_train_tensor, transform=train_transforms)
     val_dataset = TensorDataset(X_val_tensor, y_val_tensor)  # No augmentation on validation
     
-    # Create dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    # Create dataloaders with parallel loading and GPU memory pinning for speed
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=batch_size, 
+        shuffle=True,
+        num_workers=4,          # Parallel batch loading on CPU
+        pin_memory=True         # Pre-allocate GPU memory
+    )
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=batch_size, 
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True
+    )
     
     return train_loader, val_loader
 
@@ -188,13 +145,15 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device)
         
+        # Backward pass
+        optimizer.zero_grad()
+        
         # Forward pass
         outputs = model(X_batch)
         loss = criterion(outputs, y_batch)
         
-        # Backward pass
-        optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         
         # Statistics
@@ -238,7 +197,7 @@ def validate(model, val_loader, criterion, device):
 
 
 def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001,
-                device='cuda', model_name='emotion_model', class_weights=None):
+                device='cuda', model_name='emotion_model', class_weights=None, weight_decay=1e-5):
     """
     Train PyTorch model with early stopping and learning rate scheduling.
     
@@ -251,6 +210,7 @@ def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001
         device: 'cuda' or 'cpu'
         model_name: Name for saving model checkpoints
         class_weights: Class weights for imbalanced data
+        weight_decay: L2 regularization coefficient (default: 1e-5)
     
     Returns:
         Dictionary with training history
@@ -265,11 +225,11 @@ def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001
         criterion = nn.CrossEntropyLoss()
     
     # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     
     # Learning rate scheduler
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, 
-                                  patience=5, min_lr=1e-7)
+                                  patience=20, min_lr=1e-7)
     
     # Early stopping
     early_stopper = EarlyStoppingCallback(patience=15)
@@ -283,11 +243,13 @@ def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001
         'learning_rate': []
     }
     
-    print(f"\n{'='*60}")
+    print(f"\n{'='*120}")
     print(f"Training {model_name}")
     print(f"Device: {device}")
-    print(f"{'='*60}\n")
-    
+    print(f"{'='*120}")
+    print(f"{'Epoch':<10}{'Train Loss':<15}{'Train Acc':<15}{'Val Loss':<15}{'Val Acc':<15}{'Learning Rate':<20}")
+    print(f"{'-'*120}\n")
+    best_loss = float('inf')
     for epoch in range(epochs):
         # Train
         train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, device)
@@ -304,13 +266,12 @@ def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001
         
         # Print progress
         if (epoch + 1) % 5 == 0:
-            print(f"Epoch [{epoch+1}/{epochs}] - "
-                  f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | "
-                  f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f} | "
-                  f"LR: {optimizer.param_groups[0]['lr']:.1e}")
+            print(f"{epoch+1:<10}{train_loss:<15.4f}{train_acc:<15.4f}{val_loss:<15.4f}{val_acc:<15.4f}{optimizer.param_groups[0]['lr']:<20.1e}")
         
         # Save best model
-        if epoch == 0 or val_loss < min(history['val_loss'][:-1]):
+        if epoch == 0:
+            best_loss = val_loss
+        if val_loss < best_loss:
             best_loss = val_loss
             torch.save(model.state_dict(), f'saved_models/{model_name}_best.pt')
         
@@ -324,7 +285,7 @@ def train_model(model, train_loader, val_loader, epochs=100, learning_rate=0.001
             break
     
     # Load best model
-    model.load_state_dict(torch.load(f'saved_models/{model_name}_best.pt'))
+    model.load_state_dict(torch.load(f'saved_models/{model_name}_best.pt', weights_only=True))
     torch.save(model.state_dict(), f'saved_models/{model_name}_final.pt')
     
     print(f"\nBest model saved to saved_models/{model_name}_best.pt")
