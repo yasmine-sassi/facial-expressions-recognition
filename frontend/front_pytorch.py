@@ -87,7 +87,7 @@ def load_model(model_type='pytorch'):
             if model_path.exists():
                 # Try loading advanced model first
                 try:
-                    model = get_model('advanced', num_classes=7, device=device)
+                    model = get_model('medium_cnn', num_classes=7, device=device)
                     model.load_state_dict(torch.load(model_path, map_location=device))
                     model.eval()
                     return model, device, 'pytorch'

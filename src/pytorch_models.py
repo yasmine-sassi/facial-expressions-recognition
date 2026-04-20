@@ -596,119 +596,42 @@ class MobileNetV2(nn.Module):
 class ResNet50Transfer(nn.Module):
     """
     ResNet50 with transfer learning for emotion recognition.
-    
-    This model:
-    - Uses ResNet50 pretrained on ImageNet
-    - Freezes most layers and fine-tunes only the last few layers + custom head
-    - Adds a custom emotion recognition head with 3 dense layers
-    
-    Architecture matches the Keras example:
-    - ResNet50 backbone (ImageNet pretrained, last 4 layers unfrozen)
-    - Global average pooling
-    - Dropout(0.5)
-    - BatchNorm + Dense(32) + BatchNorm + ReLU + Dropout(0.5)
-    - BatchNorm + Dense(32) + BatchNorm + ReLU + Dropout(0.5)
-    - BatchNorm + Dense(32) + BatchNorm + ReLU
-    - Dense(7) for emotion classification
-    
-    Input: (batch, 1, 48, 48) - grayscale images
-    Output: (batch, 7) - logits for 7 emotion classes
+    Compatible with saved ResNet50_best.pth
     """
     
     def __init__(self, num_classes=7, freeze_backbone=True):
         super(ResNet50Transfer, self).__init__()
         
-        # Load pretrained ResNet50 (expects 3-channel RGB input)
-        resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
+        # Load pretrained ResNet50
+        self.backbone = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
         
-        # Replace the final fully connected layer with Identity
-        self.backbone = resnet50
-        self.backbone.fc = nn.Identity()
+        # Modify first layer to accept grayscale input (1 channel)
+        original_conv = self.backbone.conv1
+        self.backbone.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         
-        # Freeze backbone layers if requested (freeze all but last 4 layers matching Keras)
+        # Copy weights from original conv1 (average the 3 input channels)
+        with torch.no_grad():
+            self.backbone.conv1.weight[:, 0, :, :] = original_conv.weight.mean(dim=1)
+        
+        # Replace final FC layer with simple 2-layer head
+        in_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Sequential(
+            nn.Linear(in_features, 512),
+            nn.ReLU(True),
+            nn.Dropout(0.3),
+            nn.Linear(512, num_classes)
+        )
+        
+        # Optionally freeze backbone
         if freeze_backbone:
-            for name, param in self.backbone.named_parameters():
-                # Freeze all but the last residual layer (layer4)
-                if 'layer4' not in name:
-                    param.requires_grad = False
-        
-        # Custom emotion recognition head (matching Keras architecture)
-        # Keras uses Flatten() after ResNet50 backbone
-        # This preserves spatial feature maps instead of global pooling
-        self.dropout1 = nn.Dropout(0.5)
-        
-        # Adaptive pooling to fixed size to match Keras flatten behavior
-        # Keras flattens (B, 2048, 7, 7) -> (B, 2048*7*7)
-        # We use adaptive avg pool to get (B, 2048, 7, 7) regardless of input size
-        self.adaptivepool = nn.AdaptiveAvgPool2d((7, 7))
-        flatten_size = 2048 * 7 * 7  # 100352
-        
-        # First dense block: 100352 -> 32
-        self.bn1 = nn.BatchNorm1d(flatten_size)
-        self.fc1 = nn.Linear(flatten_size, 32, bias=False)
-        self.bn2 = nn.BatchNorm1d(32)
-        self.act1 = nn.ReLU(inplace=True)
-        self.dropout2 = nn.Dropout(0.5)
-        
-        # Second dense block: 32 -> 32
-        self.fc2 = nn.Linear(32, 32, bias=False)
-        self.bn3 = nn.BatchNorm1d(32)
-        self.act2 = nn.ReLU(inplace=True)
-        self.dropout3 = nn.Dropout(0.5)
-        
-        # Third dense block: 32 -> 32
-        self.fc3 = nn.Linear(32, 32, bias=False)
-        self.bn4 = nn.BatchNorm1d(32)
-        self.act3 = nn.ReLU(inplace=True)
-        
-        # Output layer: 32 -> 7
-        self.fc_out = nn.Linear(32, num_classes)
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+            # Unfreeze last layer
+            for param in self.backbone.fc.parameters():
+                param.requires_grad = True
     
     def forward(self, x):
-        # Input: (batch, 3, 48, 48) - RGB (converted from grayscale in data loading)
-        # ResNet50 backbone expects (batch, 3, H, W) standard input
-        
-        # Forward through backbone
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
-        
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        x = self.backbone.layer3(x)
-        x = self.backbone.layer4(x)  # Output: (B, 2048, 7, 7) for 224x224 input
-        
-        # Adaptive pooling to fixed size to match Keras Flatten behavior
-        # This preserves spatial information like Keras does
-        x = self.adaptivepool(x)  # (B, 2048, 7, 7)
-        x = x.reshape(x.size(0), -1)  # Flatten: (B, 100352)
-        
-        # Dropout after backbone
-        x = self.dropout1(x)
-        
-        # Dense layer 1: 100352 -> 32
-        x = self.bn1(x)
-        x = self.fc1(x)
-        x = self.bn2(x)
-        x = self.act1(x)
-        x = self.dropout2(x)
-        
-        # Dense layer 2: 32 -> 32
-        x = self.fc2(x)
-        x = self.bn3(x)
-        x = self.act2(x)
-        x = self.dropout3(x)
-        
-        # Dense layer 3: 32 -> 32
-        x = self.fc3(x)
-        x = self.bn4(x)
-        x = self.act3(x)
-        
-        # Output layer: 32 -> 7
-        x = self.fc_out(x)
-        
-        return x
+        return self.backbone(x)
     
     def unfreeze_backbone(self):
         """Unfreeze all backbone parameters for full fine-tuning."""
@@ -716,10 +639,143 @@ class ResNet50Transfer(nn.Module):
             param.requires_grad = True
     
     def freeze_backbone(self):
-        """Freeze all backbone parameters except layer4."""
-        for name, param in self.backbone.named_parameters():
-            if 'layer4' not in name:
-                param.requires_grad = False
+        """Freeze all backbone parameters except fc layer."""
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        for param in self.backbone.fc.parameters():
+            param.requires_grad = True
+
+
+class SmallVGG(nn.Module):
+    """Small VGG-style CNN for baseline emotion recognition."""
+    
+    def __init__(self, num_classes=7, dropout_prob=0.4):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 64, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(64),
+            nn.Conv2d(64, 64, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(64),
+            nn.MaxPool2d(2),
+            
+            nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(128),
+            nn.Conv2d(128, 128, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(128),
+            nn.MaxPool2d(2),
+            
+            nn.Conv2d(128, 256, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(256),
+            nn.Conv2d(256, 256, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(256),
+            nn.MaxPool2d(2),
+            
+            nn.Conv2d(256, 512, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(512),
+            nn.Conv2d(512, 512, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(512),
+            nn.AdaptiveAvgPool2d((2, 2)),
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(512*2*2, 1024), nn.ReLU(True), nn.Dropout(dropout_prob),
+            nn.Linear(1024, 512), nn.ReLU(True), nn.Dropout(dropout_prob),
+            nn.Linear(512, num_classes)
+        )
+    
+    def forward(self, x):
+        return self.classifier(self.features(x))
+
+
+class MediumCNN(nn.Module):
+    """Medium-sized custom CNN with better capacity than baseline CNN."""
+    
+    def __init__(self, num_classes=7, dropout_prob=0.5):
+        super().__init__()
+        # 5 convolutional blocks with increasing channels
+        self.features = nn.Sequential(
+            # Block 1: 1 -> 64
+            nn.Conv2d(1, 64, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(64),
+            nn.Conv2d(64, 64, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(64),
+            nn.MaxPool2d(2),  # 48 -> 24
+
+            # Block 2: 64 -> 128
+            nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(128),
+            nn.Conv2d(128, 128, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(128),
+            nn.MaxPool2d(2),  # 24 -> 12
+
+            # Block 3: 128 -> 256
+            nn.Conv2d(128, 256, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(256),
+            nn.Conv2d(256, 256, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(256),
+            nn.Conv2d(256, 256, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(256),
+            nn.MaxPool2d(2),  # 12 -> 6
+
+            # Block 4: 256 -> 512
+            nn.Conv2d(256, 512, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(512),
+            nn.Conv2d(512, 512, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(512),
+            nn.Conv2d(512, 512, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(512),
+            nn.MaxPool2d(2),  # 6 -> 3
+
+            # Block 5: 512 feature extraction
+            nn.Conv2d(512, 512, 3, padding=1), nn.ReLU(True), nn.BatchNorm2d(512),
+            nn.AdaptiveAvgPool2d((2, 2)),  # 3 -> 2
+        )
+        
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(512*2*2, 1024), nn.ReLU(True), nn.BatchNorm1d(1024), nn.Dropout(dropout_prob),
+            nn.Linear(1024, 512), nn.ReLU(True), nn.BatchNorm1d(512), nn.Dropout(dropout_prob),
+            nn.Linear(512, 256), nn.ReLU(True), nn.Dropout(dropout_prob),
+            nn.Linear(256, num_classes)
+        )
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.classifier(x)
+        return x
+
+
+class FER_CNN(nn.Module):
+    """FER-CNN model for emotion recognition (0.66 accuracy)."""
+    
+    def __init__(self, num_classes=7):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d(2),
+            nn.Dropout(0.25),
+
+            nn.Conv2d(64, 128, 5, padding=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            nn.MaxPool2d(2),
+            nn.Dropout(0.25),
+
+            nn.Conv2d(128, 256, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            nn.MaxPool2d(2),
+            nn.Dropout(0.25),
+
+            nn.Conv2d(256, 512, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            nn.MaxPool2d(2),
+            nn.Dropout(0.25),
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(512 * 3 * 3, 256),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+            nn.Dropout(0.25),
+
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.25),
+
+            nn.Linear(512, num_classes)
+        )
+
+    def forward(self, x):
+        return self.classifier(self.features(x))
+        return self.classifier(self.features(x))
 
 
 def get_model(model_name='baseline', num_classes=7, device='cuda'):
@@ -755,6 +811,10 @@ def get_model(model_name='baseline', num_classes=7, device='cuda'):
         model = MobileNetV2(num_classes=num_classes)
     elif model_name == 'resnet50_transfer':
         model = ResNet50Transfer(num_classes=num_classes, freeze_backbone=True)
+    elif model_name =='medium_cnn':
+        model = MediumCNN(num_classes=num_classes)
+    elif model_name == 'small_vgg':
+        model = SmallVGG(num_classes=num_classes)
     else:
         raise ValueError(f"Unknown model: {model_name}")
     
