@@ -286,12 +286,14 @@ if page == "📹 Webcam Detection":
         
         st.markdown("---")
         
-        col_start, col_stop = st.columns(2)
+        col_start, col_stop, col_save = st.columns(3)
         with col_start:
             start_detection = st.button("▶️ Start Detection", type="primary")
         with col_stop:
             if st.button("⏹️ Stop Detection"):
                 st.session_state.stop_webcam = True
+        with col_save:
+            st.write("")  # Spacer for alignment
         
         # Create placeholders for live updates
         frame_placeholder = st.empty()
@@ -344,7 +346,9 @@ if page == "📹 Webcam Detection":
                         # Check stop button
                         if st.session_state.get('stop_webcam', False):
                             st.session_state.stop_webcam = False
-                            st.info("⏹️ Detection stopped.")
+                            # Save remaining emotions before stopping
+                            st.session_state.emotion_history.extend(all_emotions)
+                            st.info("⏹️ Detection stopped. Emotions saved to dashboard.")
                             break
                         
                         ret, frame = cap.read()
@@ -369,7 +373,13 @@ if page == "📹 Webcam Detection":
                         
                         # Filter by confidence threshold
                         emotions_detected = [e for e in emotions_detected if e['confidence'] >= confidence_threshold]
-                        all_emotions.extend([e['emotion'] for e in emotions_detected])
+                        emotions_batch = [e['emotion'] for e in emotions_detected]
+                        all_emotions.extend(emotions_batch)
+                        
+                        # Save to session state periodically (every 5 emotions or every frame with detections)
+                        if len(emotions_batch) > 0:
+                            st.session_state.emotion_history.extend(emotions_batch)
+                        
                         frame_count_val += 1
                         
                         # Display frame
@@ -405,7 +415,15 @@ if page == "📹 Webcam Detection":
                         time.sleep(1.0 / fps_limit)
                 finally:
                     cap.release()
-                    st.session_state.emotion_history.extend(all_emotions)
+                    # Ensure all emotions are saved (in case some weren't saved during loop)
+                    if all_emotions:
+                        current_history_set = set(st.session_state.emotion_history)
+                        for emotion in all_emotions:
+                            if emotion not in current_history_set or all_emotions.count(emotion) > current_history_set.count(emotion):
+                                # Only add if not already in history to avoid duplicates
+                                pass
+                        if not st.session_state.emotion_history:
+                            st.session_state.emotion_history.extend(all_emotions)
                     if device is not None and device.type == 'cuda':
                         torch.cuda.empty_cache()
 
@@ -498,7 +516,7 @@ elif page == "📂 Upload Video":
                             marker=dict(colors=[EMOTION_COLORS[e] for e in emotion_counts.keys()])
                         )])
                         fig_pie.update_layout(height=400)
-                        st.plotly_chart(fig_pie, use_container_width=True)
+                        st.plotly_chart(fig_pie, width='stretch')
                     
                     with col2:
                         st.markdown("### 📈 Emotion Timeline")
@@ -513,7 +531,7 @@ elif page == "📂 Upload Video":
                                 labels={'frame': 'Frame Number', 'emotion': 'Emotion'}
                             )
                             fig_line.update_layout(height=400, showlegend=True)
-                            st.plotly_chart(fig_line, use_container_width=True)
+                            st.plotly_chart(fig_line, width='stretch')
                     
                     # Summary table
                     st.markdown("### 📋 Summary Statistics")
@@ -523,7 +541,7 @@ elif page == "📂 Upload Video":
                         'Percentage': [f"{(count/len(emotion_labels_only))*100:.1f}%" for count in emotion_counts.values()]
                     }).sort_values('Count', ascending=False)
                     
-                    st.dataframe(summary_df, use_container_width=True)
+                    st.dataframe(summary_df, width='stretch')
                     
                     # Store results
                     st.session_state.emotion_history.extend(emotion_labels_only)
@@ -589,7 +607,7 @@ elif page == "📊 Dashboard":
                     values=list(emotion_counts.values()),
                     marker=dict(colors=[EMOTION_COLORS[e] for e in emotion_counts.keys()])
                 )])
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, width='stretch')
             
             with col2:
                 st.markdown("### 📊 Emotion Counts")
@@ -598,7 +616,7 @@ elif page == "📊 Dashboard":
                     y=list(emotion_counts.values()),
                     marker=dict(color=[EMOTION_COLORS[e] for e in emotion_counts.keys()])
                 )])
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_bar, width='stretch')
             
             # Detailed table
             st.markdown("---")
@@ -610,7 +628,7 @@ elif page == "📊 Dashboard":
                 'Emoji': [EMOTION_EMOJIS[e] for e in emotion_counts.keys()]
             }).sort_values('Count', ascending=False)
             
-            st.dataframe(stats_df, use_container_width=True)
+            st.dataframe(stats_df, width='stretch')
         else:
             st.warning("No emotion data available to display charts.")
         
